@@ -1,43 +1,32 @@
-"""이상 점수 레포지토리"""
+"""AI 이상 점수 레포지토리"""
 
-from typing import List, Tuple
+from datetime import date
+from typing import Dict, List, Tuple
 
-from sqlalchemy import select, func
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.model.models import AnomalyScore
 
 
 class AnomalyScoreRepository:
-    """로컬 DB anomaly_score 테이블 WRITE / READ 전담"""
+    """anomaly_score 테이블 WRITE / READ 전담"""
 
     async def bulk_insert(self, session: AsyncSession, scores: List[dict]) -> int:
-        """
-        AI 이상 점수를 anomaly_score 테이블에 일괄 저장한다.
+        """이상 점수 일괄 저장"""
+        if not scores:
+            return 0
 
-        주의:
-        - commit은 여기서 하지 않는다.
-        - commit은 DBLocalService에서 처리한다.
-        """
-        records = [AnomalyScore(**score) for score in scores]
-        session.add_all(records)
-        return len(records)
+        rows = [AnomalyScore(**score) for score in scores]
+        session.add_all(rows)
+
+        return len(rows)
 
     async def find_latest(self, session: AsyncSession) -> List[dict]:
-        """
-        anomaly_score 테이블에서 가장 최근에 저장된 AI 결과를 조회한다.
+        """가장 최근에 저장된 이상 점수 조회
 
-        현재 DB에는 sc_c1 ~ sc_c20 값이 0.0 ~ 1.0 형태로 저장되어 있다.
-        관제시스템에서는 0~100점 형태가 보기 편하므로,
-        API 응답을 만들 때 0~100점으로 변환한다.
-
-        추가로 아래 값을 계산해서 응답에 포함한다.
-
-        - score_max: Rack 안에서 가장 높은 셀 점수
-        - score_avg: Rack 안의 평균 셀 점수
-        - max_cell: 가장 점수가 높은 셀 번호
-        - risk_level: 영어 위험 등급
-        - risk_label: 한글 위험 등급
+        기준:
+            inserted가 가장 최근인 묶음을 조회한다.
         """
         latest_inserted_result = await session.execute(
             select(func.max(AnomalyScore.inserted))
@@ -55,56 +44,92 @@ class AnomalyScoreRepository:
 
         rows = result.scalars().all()
 
-        latest_scores = []
+        return [self._to_dict(row) for row in rows]
 
-        for row in rows:
-            cell_scores = {}
-
-            for i in range(1, 21):
-                raw_score = getattr(row, f"sc_c{i}")
-
-                # DB 저장값: 0.0 ~ 1.0
-                # API 응답값: 0 ~ 100점
-                display_score = round(raw_score * 100, 2)
-
-                cell_scores[f"c{i}"] = display_score
-
-            score_values = list(cell_scores.values())
-
-            score_max = round(max(score_values), 2)
-            score_avg = round(sum(score_values) / len(score_values), 2)
-            max_cell = max(cell_scores, key=cell_scores.get)
-
-            risk_level, risk_label = self._get_risk_level(score_max)
-
-            latest_scores.append(
-                {
-                    "id": row.id,
-                    "rack_idx": row.rack_idx,
-                    "date": row.date.isoformat(),
-                    "inserted": row.inserted.isoformat(),
-                    "updated": row.updated.isoformat(),
-                    "score_max": score_max,
-                    "score_avg": score_avg,
-                    "max_cell": max_cell,
-                    "risk_level": risk_level,
-                    "risk_label": risk_label,
-                    "cell_scores": cell_scores,
-                }
-            )
-
-        return latest_scores
-
-    def _get_risk_level(self, score: float) -> Tuple[str, str]:
-        """
-        0~100점 기준으로 위험 등급을 계산한다.
+    async def find_by_date(self, session: AsyncSession, target_date: date) -> List[dict]:
+        """특정 날짜의 이상 점수 조회
 
         기준:
-        - 0 이상 30 미만: 정상
-        - 30 이상 60 미만: 주의
-        - 60 이상 80 미만: 경고
-        - 80 이상 100 이하: 위험
+            anomaly_score.date = target_date
+
+        주의:
+            같은 날짜에 여러 번 AI 파이프라인을 실행하면
+            해당 날짜의 결과가 여러 묶음 저장될 수 있다.
+
+            현재는 해당 날짜 전체 결과를 inserted 최신순, rack_idx 순으로 반환한다.
+            나중에 pipeline_run_id를 anomaly_score에 추가하면 실행 단위로 더 정확하게 묶을 수 있다.
         """
+        result = await session.execute(
+            select(AnomalyScore)
+            .where(AnomalyScore.date == target_date)
+            .order_by(desc(AnomalyScore.inserted), AnomalyScore.rack_idx)
+        )
+
+        rows = result.scalars().all()
+
+        return [self._to_dict(row) for row in rows]
+
+    async def find_latest_by_date(self, session: AsyncSession, target_date: date) -> List[dict]:
+        """특정 날짜의 가장 최근 실행 결과만 조회
+
+        기준:
+            1. target_date에 해당하는 anomaly_score 중
+            2. inserted가 가장 최근인 묶음만 조회한다.
+
+        관제시스템에서는 보통 이 함수가 더 적합하다.
+        같은 날짜를 여러 번 재실행해도 가장 최근 결과만 내려주기 때문이다.
+        """
+        latest_inserted_result = await session.execute(
+            select(func.max(AnomalyScore.inserted))
+            .where(AnomalyScore.date == target_date)
+        )
+        latest_inserted = latest_inserted_result.scalar_one_or_none()
+
+        if latest_inserted is None:
+            return []
+
+        result = await session.execute(
+            select(AnomalyScore)
+            .where(AnomalyScore.date == target_date)
+            .where(AnomalyScore.inserted == latest_inserted)
+            .order_by(AnomalyScore.rack_idx)
+        )
+
+        rows = result.scalars().all()
+
+        return [self._to_dict(row) for row in rows]
+
+    def _to_dict(self, row: AnomalyScore) -> Dict:
+        """ORM 객체를 API 응답용 dict로 변환"""
+        cell_scores = {
+            f"c{i}": round(getattr(row, f"sc_c{i}") * 100, 2)
+            for i in range(1, 21)
+        }
+
+        score_values = list(cell_scores.values())
+        score_max = round(max(score_values), 2)
+        score_avg = round(sum(score_values) / len(score_values), 2)
+
+        max_cell = max(cell_scores, key=cell_scores.get)
+
+        risk_level, risk_label = self._get_risk_level(score_max)
+
+        return {
+            "id": row.id,
+            "rack_idx": row.rack_idx,
+            "date": row.date.isoformat() if row.date else None,
+            "inserted": row.inserted.isoformat() if row.inserted else None,
+            "updated": row.updated.isoformat() if row.updated else None,
+            "score_max": score_max,
+            "score_avg": score_avg,
+            "max_cell": max_cell,
+            "risk_level": risk_level,
+            "risk_label": risk_label,
+            "cell_scores": cell_scores,
+        }
+
+    def _get_risk_level(self, score: float) -> Tuple[str, str]:
+        """점수 기준 위험 등급 계산"""
         if score < 30:
             return "normal", "정상"
 

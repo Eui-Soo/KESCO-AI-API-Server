@@ -85,6 +85,20 @@ class DBLocalService:
         logger.info(f'✅ 최신 AnomalyScore 조회 완료: {len(scores)}건')
         return scores
 
+    async def find_anomaly_scores_by_date(self, target_date) -> List[dict]:
+        """특정 날짜의 가장 최근 이상 점수 조회"""
+        async with self._session_factory() as session:
+            from repo.anomaly_repo import AnomalyScoreRepository
+
+            repo = AnomalyScoreRepository()
+            scores = await repo.find_latest_by_date(session, target_date)
+
+        logger.info(
+            f'✅ 날짜별 AnomalyScore 조회 완료: '
+            f'target_date={target_date}, count={len(scores)}건'
+        )
+        return scores
+    
     async def create_pipeline_run(
             self,
             ess_id: str,
