@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     - APP_PORT=8000
     - DB_HOST=localhost
     - SCHEDULE_HOUR=0
+    - DEFAULT_ESS_ID=KESCO_ESS_001
     """
 
     # Application
@@ -29,6 +30,14 @@ class Settings(BaseSettings):
 
     # Files
     FILES_DIR: str = 'files'
+
+    # ESS
+    # Parquet 저장 경로에 사용할 기본 ESS ID
+    DEFAULT_ESS_ID: str = 'KESCO_ESS_001'
+
+    # File retention
+    # preprocessed 데이터는 raw 데이터에서 다시 만들 수 있으므로 일정 기간 후 자동 삭제한다.
+    PREPROCESSED_RETENTION_DAYS: int = 60
 
     # Scheduler
     # 매일 몇 시에 AI 파이프라인을 자동 실행할지 설정한다.
@@ -77,6 +86,11 @@ class Settings(BaseSettings):
     def log_dir_path(self) -> Path:
         """로그 디렉토리 경로"""
         return Path(self.LOG_DIR)
+
+    @cached_property
+    def files_dir_path(self) -> Path:
+        """Parquet 파일 저장 루트 디렉토리"""
+        return Path(self.FILES_DIR)
 
     @cached_property
     def async_db_url(self) -> str:
