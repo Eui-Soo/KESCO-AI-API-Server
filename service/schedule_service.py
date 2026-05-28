@@ -1,7 +1,7 @@
 """APScheduler 서비스 - 일일 ESS AI 처리 파이프라인"""
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -61,8 +61,21 @@ class SchedulerService:
             f'✅ SchedulerService 초기화 완료 - 매일 '
             f'{self._settings.SCHEDULE_HOUR:02d}:'
             f'{self._settings.SCHEDULE_MINUTE:02d}:'
-            f'{self._settings.SCHEDULE_SECOND:02d} 자동 실행'
+            f'{self._settings.SCHEDULE_SECOND:02d} 자동 실행, '
+            f'처리 날짜 offset={self._settings.TARGET_DATE_OFFSET_DAYS}'
         )
+
+    def _get_target_date(self) -> date:
+        """스케줄 실행 시 처리할 대상 날짜 계산
+
+        예:
+            TARGET_DATE_OFFSET_DAYS=0
+                → 오늘 데이터 처리
+
+            TARGET_DATE_OFFSET_DAYS=-1
+                → 전날 데이터 처리
+        """
+        return date.today() + timedelta(days=self._settings.TARGET_DATE_OFFSET_DAYS)
 
     async def _process(self) -> None:
         """스케줄러가 매일 자동으로 실행하는 AI 처리 파이프라인"""
@@ -71,9 +84,9 @@ class SchedulerService:
             return
 
         self._is_running = True
-        target_date = date.today()
+        target_date = self._get_target_date()
 
-        logger.info(f'🚀 일일 AI 파이프라인 시작 [{target_date}]')
+        logger.info(f'🚀 일일 AI 파이프라인 시작 [target_date={target_date}]')
 
         try:
             logger.info('📥 [1/3] 관제시스템 DB에서 배터리 데이터 수집')
@@ -90,7 +103,7 @@ class SchedulerService:
 
             logger.info(
                 f'✅ 일일 AI 파이프라인 완료 '
-                f'[date={target_date}, battery_count={len(data)}, saved_score_count={saved_count}]'
+                f'[target_date={target_date}, battery_count={len(data)}, saved_score_count={saved_count}]'
             )
 
         except Exception as e:
@@ -105,7 +118,7 @@ class SchedulerService:
         운영에서는 관제시스템이 이 함수를 직접 호출하지 않는다.
         개발자가 Swagger에서 테스트할 때만 사용한다.
 
-        현재는 오늘 날짜 데이터를 기준으로 실행한다.
+        현재는 TARGET_DATE_OFFSET_DAYS 설정을 반영한 날짜를 기준으로 실행한다.
         """
         if self._is_running:
             return {
@@ -114,9 +127,9 @@ class SchedulerService:
             }
 
         self._is_running = True
-        target_date = date.today()
+        target_date = self._get_target_date()
 
-        logger.info(f'🚀 수동 AI 파이프라인 시작 [{target_date}]')
+        logger.info(f'🚀 수동 AI 파이프라인 시작 [target_date={target_date}]')
 
         try:
             logger.info('📥 [1/3] 관제시스템 DB에서 배터리 데이터 수집')
@@ -133,12 +146,13 @@ class SchedulerService:
 
             logger.info(
                 f'✅ 수동 AI 파이프라인 완료 '
-                f'[date={target_date}, battery_count={len(data)}, saved_score_count={saved_count}]'
+                f'[target_date={target_date}, battery_count={len(data)}, saved_score_count={saved_count}]'
             )
 
             return {
                 'status': 'success',
                 'target_date': target_date.isoformat(),
+                'target_date_offset_days': self._settings.TARGET_DATE_OFFSET_DAYS,
                 'battery_count': len(data),
                 'saved_score_count': saved_count,
                 'message': 'AI pipeline completed successfully.',
@@ -150,6 +164,7 @@ class SchedulerService:
             return {
                 'status': 'error',
                 'target_date': target_date.isoformat(),
+                'target_date_offset_days': self._settings.TARGET_DATE_OFFSET_DAYS,
                 'message': str(e),
             }
 
@@ -163,7 +178,8 @@ class SchedulerService:
             f'⏰ 스케줄러 시작 - 매일 '
             f'{self._settings.SCHEDULE_HOUR:02d}:'
             f'{self._settings.SCHEDULE_MINUTE:02d}:'
-            f'{self._settings.SCHEDULE_SECOND:02d} 자동 실행'
+            f'{self._settings.SCHEDULE_SECOND:02d} 자동 실행, '
+            f'처리 날짜 offset={self._settings.TARGET_DATE_OFFSET_DAYS}'
         )
 
     def stop(self) -> None:

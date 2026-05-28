@@ -14,8 +14,6 @@ class Settings(BaseSettings):
     - APP_PORT=8000
     - DB_HOST=localhost
     - SCHEDULE_HOUR=0
-
-    코드에서는 settings.APP_PORT, settings.DB_HOST처럼 사용한다.
     """
 
     # Application
@@ -37,6 +35,11 @@ class Settings(BaseSettings):
     SCHEDULE_HOUR: int = 0
     SCHEDULE_MINUTE: int = 0
     SCHEDULE_SECOND: int = 30
+
+    # 스케줄 실행 시 처리할 데이터 날짜 기준
+    # 0  = 오늘 데이터 처리
+    # -1 = 전날 데이터 처리
+    TARGET_DATE_OFFSET_DAYS: int = 0
 
     # Database - 우리 AI 결과 DB
     DB_HOST: str = 'localhost'
