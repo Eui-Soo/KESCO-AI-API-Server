@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+*.egg-info/
+build/
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# NodeModule
+node_modules/
+
+# Redis/Data
+dump.rdb
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code guides (internal use only)
+CLAUDE.md
+
+# Local development
+.claude/
+
+# 로그파일
+log/
+files/
+
+# Environment variables
+.env
+.env.dev
+.env.local
+.env.production
