@@ -58,6 +58,75 @@ class Battery(Base):
     inserted = Column(DateTime, nullable=False, server_default=func.now())
     updated = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
 
+class MonitoringBatterySample(Base):
+    """관제시스템 원본 배터리 데이터 예시 테이블
+
+    실제 운영 환경에서 반드시 이 테이블을 사용하는 것은 아니다.
+
+    목적:
+        - 관제시스템 DB 구조를 받기 전 개발용 표준 구조로 사용
+        - 실제 관제 DB 컬럼을 어떤 내부 필드로 매핑할지 기준 제공
+        - 로컬 테스트에서 관제시스템 원본 DB를 흉내내기 위한 샘플 테이블
+
+    실제 관제 DB 연동 시:
+        repo/battery_repo.py에서 실제 DB 컬럼명을 이 표준 구조로 변환한다.
+
+    예:
+        clct_dt 또는 collect_time  -> measured_at
+        site_code 또는 eqp_no      -> ess_id / site_id
+        rack_no                    -> rack_no
+        cel_volt_01                -> cv_1
+    """
+
+    __tablename__ = "monitoring_battery_sample"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # ESS / Site 식별 정보
+    ess_id = Column(String(100), nullable=False)
+    site_id = Column(String(100), nullable=True)
+
+    # 배터리 계층 구조
+    bank_no = Column(Integer, nullable=True)
+    rack_no = Column(Integer, nullable=False)
+    string_no = Column(Integer, nullable=True)
+    module_no = Column(Integer, nullable=True)
+
+    # 실제 센서 측정 시간
+    measured_at = Column(DateTime, nullable=False)
+
+    # Cell voltage
+    cv_1 = Column(Float, nullable=True)
+    cv_2 = Column(Float, nullable=True)
+    cv_3 = Column(Float, nullable=True)
+    cv_4 = Column(Float, nullable=True)
+    cv_5 = Column(Float, nullable=True)
+    cv_6 = Column(Float, nullable=True)
+    cv_7 = Column(Float, nullable=True)
+    cv_8 = Column(Float, nullable=True)
+    cv_9 = Column(Float, nullable=True)
+    cv_10 = Column(Float, nullable=True)
+    cv_11 = Column(Float, nullable=True)
+    cv_12 = Column(Float, nullable=True)
+    cv_13 = Column(Float, nullable=True)
+    cv_14 = Column(Float, nullable=True)
+    cv_15 = Column(Float, nullable=True)
+    cv_16 = Column(Float, nullable=True)
+    cv_17 = Column(Float, nullable=True)
+    cv_18 = Column(Float, nullable=True)
+    cv_19 = Column(Float, nullable=True)
+    cv_20 = Column(Float, nullable=True)
+
+    # 선택 센서 값
+    temperature = Column(Float, nullable=True)
+    current_a = Column(Float, nullable=True)
+    voltage_v = Column(Float, nullable=True)
+    soc = Column(Float, nullable=True)
+
+    # DB 저장/수정 시간
+    inserted = Column(DateTime, nullable=False, server_default=func.now())
+    updated = Column(DateTime, nullable=False, server_default=func.now(), onupdate=func.now())
+
 
 class AnomalyScore(Base):
     """AI 이상 점수 결과 테이블
